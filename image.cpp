@@ -32,7 +32,8 @@ DEFINE_string(input_filter, "", "Filter type [dark2alpha]");
 DEFINE_bool(visualize, false, "Display");
 DEFINE_string(shader, "", "Apply this shader");
 DEFINE_string(make_png_atlas, "", "Build PNG atlas with files in directory");
-DEFINE_int(make_png_atlas_size, 256, "Build PNG atlas with this size");
+DEFINE_int(make_png_atlas_width, 256, "Build PNG atlas with this width");
+DEFINE_int(make_png_atlas_height, 256, "Build PNG atlas with this height");
 DEFINE_string(split_png_atlas, "", "Split PNG atlas back into individual files");
 DEFINE_string(filter_png_atlas, "", "Filter PNG atlas");
 
@@ -93,8 +94,8 @@ void Frame3D(LFL::Window *W, unsigned clicks, unsigned mic_samples, bool cam_sam
         screen->gd->LoadIdentity();
         screen->gd->Mult(m);
 
-        glTimeResolutionShaderWindows(&MyShader, Color::black,
-                                      Box(-screen->width/2, -screen->height/2, screen->width, screen->height));
+        glShadertoyShaderWindows(&MyShader, Color::black,
+                                 Box(-screen->width/2, -screen->height/2, screen->width, screen->height));
     } else {
         screen->cam->Look();
         scene.Draw(&asset.vec);
@@ -107,7 +108,7 @@ void Frame2D(LFL::Window *W, unsigned clicks, unsigned mic_samples, bool cam_sam
         screen->gd->ActiveTexture(0);
         screen->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
         screen->gd->UseShader(&MyShader);
-        glTimeResolutionShaderWindows(&MyShader, Color::black, Box(screen->width, screen->height));
+        glShadertoyShaderWindows(&MyShader, Color::black, Box(screen->width, screen->height));
     } else {
         screen->gd->EnableLayering();
         a->tex.Draw(screen->Box());
@@ -152,8 +153,8 @@ extern "C" int main(int argc, const char *argv[]) {
 
     BindMap *binds = screen->binds = new BindMap();
 //  binds->Add(Bind(key,            callback));
-    binds->Add(Bind(Key::Backquote, Bind::CB(bind([&](){ screen->console->Toggle(); }))));
-    binds->Add(Bind(Key::Quote,     Bind::CB(bind([&](){ screen->console->Toggle(); }))));
+    binds->Add(Bind(Key::Backquote, Bind::CB(bind([&](){ app->shell.console(vector<string>()); }))));
+    binds->Add(Bind(Key::Quote,     Bind::CB(bind([&](){ app->shell.console(vector<string>()); }))));
     binds->Add(Bind(Key::Escape,    Bind::CB(bind(&Shell::quit,            &app->shell, vector<string>()))));
     binds->Add(Bind(Key::Return,    Bind::CB(bind(&Shell::grabmode,        &app->shell, vector<string>()))));
     binds->Add(Bind(Key::LeftShift, Bind::TimeCB(bind(&Entity::RollLeft,   screen->cam, _1))));
@@ -170,24 +171,30 @@ extern "C" int main(int argc, const char *argv[]) {
         vector<string> png;
         DirectoryIter d(FLAGS_make_png_atlas, 0, 0, ".png");
         for (const char *fn = d.Next(); fn; fn = d.Next()) png.push_back(FLAGS_make_png_atlas + fn);
-        AtlasFontEngine::MakeFromPNGFiles("png_atlas", png, FLAGS_make_png_atlas_size, NULL);
+        AtlasFontEngine::MakeFromPNGFiles("png_atlas", png, point(FLAGS_make_png_atlas_width, FLAGS_make_png_atlas_height), NULL);
     }
 
     if (!FLAGS_split_png_atlas.empty()) {
-        Singleton<AtlasFontEngine>::Get()->Init(FontDesc(FLAGS_split_png_atlas, "", 0, Color::black));
-        Font *font = Fonts::Get(FLAGS_split_png_atlas, "", 0, Color::black);
+        Singleton<AtlasFontEngine>::Get()->Init(FontDesc(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0));
+        Font *font = Fonts::Get(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0);
         CHECK(font);
+
         map<v4, int> glyph_index;
-        for (int i = 255; i >= 0; i--) {
-            if (!font->glyph->table[i].tex.width && !font->glyph->table[i].tex.height) continue;
-            glyph_index[v4(font->glyph->table[i].tex.coord)] = i;
+        for (auto b = font->glyph->table.begin(), e = font->glyph->table.end(), i = b; i != e; ++i) {
+            CHECK(i->tex.width > 0 && i->tex.height > 0 && i->advance > 0);
+            glyph_index[v4(i->tex.coord)] = i->id;
         }
+        for (auto b = font->glyph->index.begin(), e = font->glyph->index.end(), i = b; i != e; ++i) {
+            CHECK(i->second.tex.width > 0 && i->second.tex.height > 0 && i->second.advance > 0);
+            glyph_index[v4(i->second.tex.coord)] = i->second.id;
+        }
+
         map<int, v4> glyphs;
-        for (map<v4, int>::const_iterator i = glyph_index.begin(); i != glyph_index.end(); ++i) glyphs[i->second] = i->first;
+        for (auto i = glyph_index.begin(); i != glyph_index.end(); ++i) glyphs[i->second] = i->first;
 
         string outdir = StrCat(app->assetdir, FLAGS_split_png_atlas);
         LocalFile::mkdir(outdir, 0755);
-        string atlas_png_fn = StrCat(app->assetdir, FLAGS_split_png_atlas, "0,0,0,0,0", "00.png");
+        string atlas_png_fn = StrCat(app->assetdir, FLAGS_split_png_atlas, ",0,0,0,0,0.0000.png");
         AtlasFontEngine::SplitIntoPNGFiles(atlas_png_fn, glyphs, outdir + LocalFile::Slash);
     }
 
