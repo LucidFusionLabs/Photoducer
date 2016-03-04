@@ -1,39 +1,19 @@
 # $Id: CMakeLists.txt 1320 2014-10-26 08:12:52Z justin $
 
-lfl_clear_projects()
-set(LFL_FREETYPE 1)
-set(LFL_ASSIMP 1)
-set(LFL_LFLINPUT 1)
-set(LFL_LFLVIDEO 1)
-set(LFL_PNG 1)
-
-if(LFL_ANDROID)
-    set(LFL_GLES2 1)
-elseif(LFL_IPHONE)
-    set(LFL_GLES2 1)
-else(LFL_ANDROID)
-    set(LFL_GLES2 1)
-    set(LFL_GLOG 1)
-    set(LFL_FFMPEG 1)
-    set(LFL_LAME 1)
-    set(LFL_X264 1)
-endif(LFL_ANDROID)
-
 lfl_project(image)
-add_subdirectory(../core/lfapp ${CMAKE_CURRENT_BINARY_DIR}/lfapp_obj)
-add_definitions(${LFAPP_DEF})
-include_directories(${LFAPP_INCLUDE})
-
-if(LFL_ANDROID)
-    add_library(image image.cpp)
-else(LFL_ANDROID)
-    add_executable(image image.cpp)
-    target_link_libraries(image ${LFAPP_LIB})
-endif(LFL_ANDROID)
-lfapp_post_build_start(image image LImage)
+add_definitions(${LFL_APP_DEF})
+include_directories(${LFL_APP_INCLUDE})
+add_executable(image image.cpp)
+target_link_libraries(image ${LFL_APP_LIB} ${GTEST_LIB} ${LFL_APP_OS} ${LFL_APP_FRAMEWORK} ${LFL_APP_GRAPHICS}
+                      app_null_audio app_null_camera app_opencv_matrix app_null_fft app_simple_loader
+                      app_simple_resampler app_iconv_convert app_regexp_regex app_libsregex_sregex
+                      app_libpng_png app_null_jpeg app_null_gif app_libcss_css app_null_ttf app_null_ssl)
 
 include_directories(${GTEST_INCLUDE})
 add_executable(gl_tests gl_tests.cpp)
 target_link_libraries(gl_tests ${LFAPP_LIB} ${GTEST_LIB})
 add_dependencies(gl_tests image)
-lfapp_post_build_copy_bin(gl_tests gl_tests LImage)
+target_link_libraries(gl_tests ${LFL_APP_LIB} ${GTEST_LIB} app_null_os app_null_framework app_null_graphics
+                      app_null_audio app_null_camera app_opencv_matrix app_null_fft app_simple_loader
+                      app_simple_resampler app_iconv_convert app_regexp_regex app_libsregex_sregex
+                      app_libpng_png app_null_jpeg app_null_gif app_libcss_css app_null_ttf app_null_ssl)

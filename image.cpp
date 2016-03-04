@@ -175,7 +175,7 @@ extern "C" int main(int argc, const char *argv[]) {
     }
 
     if (!FLAGS_split_png_atlas.empty()) {
-        Singleton<AtlasFontEngine>::Get()->Init(FontDesc(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0));
+        app->fonts->atlas_engine.get()->Init(FontDesc(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0));
         Font *font = Fonts::Get(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0);
         CHECK(font);
 
