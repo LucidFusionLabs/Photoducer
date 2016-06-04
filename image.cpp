@@ -153,10 +153,10 @@ void MyWindowStart(Window *W) {
 }; // namespace LFL
 using namespace LFL;
 
-extern "C" void MyAppCreate() {
+extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_near_plane = 0.1;
-  FLAGS_lfapp_video = FLAGS_lfapp_input = true;
-  app = new Application();
+  FLAGS_enable_video = FLAGS_enable_input = true;
+  app = new Application(argc, argv);
   screen = new Window();
   my_app = new MyAppState();
   app->window_start_cb = MyWindowStart;
@@ -165,8 +165,8 @@ extern "C" void MyAppCreate() {
   app->exit_cb = [](){ delete my_app; };
 }
 
-extern "C" int MyAppMain(int argc, const char* const* argv) {
-  if (app->Create(argc, argv, __FILE__)) return -1;
+extern "C" int MyAppMain() {
+  if (app->Create(__FILE__)) return -1;
   if (app->Init()) return -1;
 
   // my_app->asset.Add(name,  texture,     scale, translate, rotate, geometry
@@ -179,8 +179,8 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
   my_app->soundasset.Add("draw",  "Draw.wav", nullptr, 0,        0,           0      );
   my_app->soundasset.Load();
 
-  app->scheduler.AddWaitForeverKeyboard();
-  app->scheduler.AddWaitForeverMouse();
+  app->scheduler.AddWaitForeverKeyboard(screen);
+  app->scheduler.AddWaitForeverMouse(screen);
   app->StartNewWindow(screen);
   MyGUI *gui = screen->GetGUI<MyGUI>(0);
 
@@ -225,6 +225,7 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
 
   if (FLAGS_input.empty()) FATAL("no input supplied");
   Asset *asset_input = my_app->asset("input");
+  LocalFile input_file(FLAGS_input, "r");
 
   if (!FLAGS_shader.empty()) {
     string vertex_shader = LocalFile::FileContents(StrCat(app->assetdir, FLAGS_input_3D ? "" : "lfapp_", "vertex.glsl"));
@@ -236,7 +237,7 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
     FLAGS_input_3D = true;
     asset_input->cb = bind(&MyGUI::DrawInput3D, gui, _1, _2);
     asset_input->scale = FLAGS_input_scale;
-    asset_input->geometry = Geometry::LoadOBJ(FLAGS_input).release();
+    asset_input->geometry = Geometry::LoadOBJ(&input_file).release();
     gui->scene.Add(new Entity("axis",  my_app->asset("axis")));
     gui->scene.Add(new Entity("grid",  my_app->asset("grid")));
     gui->scene.Add(new Entity("input", asset_input));
@@ -254,7 +255,7 @@ extern "C" int MyAppMain(int argc, const char* const* argv) {
     FLAGS_draw_grid = true;
     Texture pb;
     app->asset_loader->default_video_loader->LoadVideo
-      (app->asset_loader->default_video_loader->LoadVideoFile(FLAGS_input), &asset_input->tex, false);
+      (app->asset_loader->default_video_loader->LoadVideoFile(&input_file), &asset_input->tex, false);
     pb.AssignBuffer(&asset_input->tex, true);
 
     if (pb.width && pb.height) screen->Reshape(FLAGS_input_scale ? pb.width *FLAGS_input_scale : pb.width,
