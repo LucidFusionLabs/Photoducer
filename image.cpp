@@ -35,40 +35,39 @@ DEFINE_string(split_png_atlas, "", "Split PNG atlas back into individual files")
 DEFINE_string(filter_png_atlas, "", "Filter PNG atlas");
 
 struct MyAppState {
-  AssetMap asset;
-  SoundAssetMap soundasset;
   Shader shader;
 } *my_app;
 
 struct MyGUI : public GUI {
   Scene scene;
+  MyGUI(Window *W) : GUI(W) {}
 
-  void DrawInput3D(Asset *a, Entity *e) {
+  void DrawInput3D(GraphicsDevice *gd, Asset *a, Entity *e) {
     if (!FLAGS_input_prims.empty() && a && a->geometry) {
       vector<int> highlight_input_prims;
       Split(FLAGS_input_prims, isint2<',', ' '>, &highlight_input_prims);
 
-      screen->gd->DisableLighting();
-      screen->gd->Color4f(1.0, 0.0, 0.0, 1.0);
+      gd->DisableLighting();
+      gd->Color4f(1.0, 0.0, 0.0, 1.0);
       int vpp = GraphicsDevice::VertsPerPrimitive(a->geometry->primtype);
       for (auto i = highlight_input_prims.begin(); i != highlight_input_prims.end(); ++i) {
         CHECK_LT(*i, a->geometry->count / vpp);
-        scene.Draw(a->geometry, e, *i * vpp, vpp);
+        scene.Draw(gd, a->geometry, e, *i * vpp, vpp);
       }
-      screen->gd->Color4f(1.0, 1.0, 1.0, 1.0);
+      gd->Color4f(1.0, 1.0, 1.0, 1.0);
     }
   }
 
   void Frame3D(LFL::Window *W, unsigned clicks, int flag) {
-    Asset *a = my_app->asset("input");
+    Asset *a = app->asset("input");
     if (my_app->shader.ID) {
-      screen->gd->ActiveTexture(0);
-      screen->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
-      screen->gd->UseShader(&my_app->shader);
+      W->gd->ActiveTexture(0);
+      W->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
+      W->gd->UseShader(&my_app->shader);
 
       // mandelbox params
       float par[20][3] = { 0.25, -1.77 };
-      my_app->shader.SetUniform1f("xres", screen->width);
+      my_app->shader.SetUniform1f("xres", W->width);
       my_app->shader.SetUniform3fv("par", sizeofarray(par), &par[0][0]);
       my_app->shader.SetUniform1f("fov_x", FLAGS_field_of_view);
       my_app->shader.SetUniform1f("fov_y", FLAGS_field_of_view);
@@ -85,33 +84,34 @@ struct MyGUI : public GUI {
       my_app->shader.SetUniform1f("y_scale", 1);
       my_app->shader.SetUniform1f("y_offset", 0);
 
-      v3 up = screen->cam->up, ort = screen->cam->ort, pos = screen->cam->pos;
+      v3 up = scene.cam.up, ort = scene.cam.ort, pos = scene.cam.pos;
       v3 right = v3::Cross(ort, up);
       float m[16] = { right.x, right.y, right.z, 0,
                       up.x,    up.y,    up.z,    0,
                       ort.x,   ort.y,   ort.z,   0,
                       pos.x,   pos.y,   pos.z,   0 };
-      screen->gd->LoadIdentity();
-      screen->gd->Mult(m);
+      W->gd->LoadIdentity();
+      W->gd->Mult(m);
 
-      glShadertoyShaderWindows(&my_app->shader, Color::black,
-                               Box(-screen->width/2, -screen->height/2, screen->width, screen->height));
+      glShadertoyShaderWindows(W->gd, &my_app->shader, Color::black,
+                               Box(-W->width/2, -W->height/2, W->width, W->height));
     } else {
-      screen->cam->Look(screen->gd);
-      scene.Draw(&my_app->asset.vec);
+      scene.cam.Look(W->gd);
+      scene.Draw(W->gd, &app->asset.vec);
     }
   }
 
   void Frame2D(LFL::Window *W, unsigned clicks, int flag) {
-    Asset *a = my_app->asset("input");
+    GraphicsContext gc(W->gd);
+    Asset *a = app->asset("input");
     if (my_app->shader.ID) {
-      screen->gd->ActiveTexture(0);
-      screen->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
-      screen->gd->UseShader(&my_app->shader);
-      glShadertoyShaderWindows(&my_app->shader, Color::black, Box(screen->width, screen->height));
+      W->gd->ActiveTexture(0);
+      W->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
+      W->gd->UseShader(&my_app->shader);
+      glShadertoyShaderWindows(W->gd, &my_app->shader, Color::black, Box(W->width, W->height));
     } else {
       screen->gd->EnableLayering();
-      a->tex.Draw(screen->Box());
+      a->tex.Draw(&gc, W->Box());
     }
   }
 
@@ -131,23 +131,23 @@ void MyWindowInit(Window *W) {
 }
 
 void MyWindowStart(Window *W) {
-  MyGUI *gui = W->AddGUI(make_unique<MyGUI>());
+  MyGUI *gui = W->AddGUI(make_unique<MyGUI>(W));
   W->frame_cb = bind(&MyGUI::Frame, gui, _1, _2, _3);
-  W->shell = make_unique<Shell>(&my_app->asset, &my_app->soundasset, nullptr);
+  W->shell = make_unique<Shell>();
 
   BindMap *binds = W->AddInputController(make_unique<BindMap>());
   binds->Add(Key::Backquote, Bind::CB(bind([&](){ W->shell->console(vector<string>()); })));
   binds->Add(Key::Quote,     Bind::CB(bind([&](){ W->shell->console(vector<string>()); })));
   binds->Add(Key::Escape,    Bind::CB(bind(&Shell::quit,            W->shell.get(), vector<string>())));
   binds->Add(Key::Return,    Bind::CB(bind(&Shell::grabmode,        W->shell.get(), vector<string>())));
-  binds->Add(Key::LeftShift, Bind::TimeCB(bind(&Entity::RollLeft,   W->cam.get(), _1)));
-  binds->Add(Key::Space,     Bind::TimeCB(bind(&Entity::RollRight,  W->cam.get(), _1)));
-  binds->Add('w',            Bind::TimeCB(bind(&Entity::MoveFwd,    W->cam.get(), _1)));
-  binds->Add('s',            Bind::TimeCB(bind(&Entity::MoveRev,    W->cam.get(), _1)));
-  binds->Add('a',            Bind::TimeCB(bind(&Entity::MoveLeft,   W->cam.get(), _1)));
-  binds->Add('d',            Bind::TimeCB(bind(&Entity::MoveRight,  W->cam.get(), _1)));
-  binds->Add('q',            Bind::TimeCB(bind(&Entity::MoveDown,   W->cam.get(), _1)));
-  binds->Add('e',            Bind::TimeCB(bind(&Entity::MoveUp,     W->cam.get(), _1)));
+  binds->Add(Key::LeftShift, Bind::TimeCB(bind(&Entity::RollLeft,   &gui->scene.cam, _1)));
+  binds->Add(Key::Space,     Bind::TimeCB(bind(&Entity::RollRight,  &gui->scene.cam, _1)));
+  binds->Add('w',            Bind::TimeCB(bind(&Entity::MoveFwd,    &gui->scene.cam, _1)));
+  binds->Add('s',            Bind::TimeCB(bind(&Entity::MoveRev,    &gui->scene.cam, _1)));
+  binds->Add('a',            Bind::TimeCB(bind(&Entity::MoveLeft,   &gui->scene.cam, _1)));
+  binds->Add('d',            Bind::TimeCB(bind(&Entity::MoveRight,  &gui->scene.cam, _1)));
+  binds->Add('q',            Bind::TimeCB(bind(&Entity::MoveDown,   &gui->scene.cam, _1)));
+  binds->Add('e',            Bind::TimeCB(bind(&Entity::MoveUp,     &gui->scene.cam, _1)));
 }
 
 }; // namespace LFL
@@ -169,15 +169,15 @@ extern "C" int MyAppMain() {
   if (app->Create(__FILE__)) return -1;
   if (app->Init()) return -1;
 
-  // my_app->asset.Add(name,  texture,     scale, translate, rotate, geometry
-  my_app->asset.Add("axis",   "",          0,     0,         0,      nullptr,                  nullptr, 0, 0, Asset::DrawCB(bind(&glAxis, _1, _2)));
-  my_app->asset.Add("grid",   "",          0,     0,         0,      Grid::Grid3D().release(), nullptr, 0, 0);
-  my_app->asset.Add("input",  "",          0,     0,         0,      nullptr,                  nullptr, 0, 0);
-  my_app->asset.Load();
+  // app->asset.Add(name,  texture,     scale, translate, rotate, geometry
+  app->asset.Add("axis",   "",          0,     0,         0,      nullptr,                  nullptr, 0, 0, Asset::DrawCB(bind(&glAxis, _1, _2, _3)));
+  app->asset.Add("grid",   "",          0,     0,         0,      Grid::Grid3D().release(), nullptr, 0, 0);
+  app->asset.Add("input",  "",          0,     0,         0,      nullptr,                  nullptr, 0, 0);
+  app->asset.Load();
 
-  // my_app->soundasset.Add(name, filename,   ringbuf, channels, sample_rate, seconds);
-  my_app->soundasset.Add("draw",  "Draw.wav", nullptr, 0,        0,           0      );
-  my_app->soundasset.Load();
+  // app->soundasset.Add(name, filename,   ringbuf, channels, sample_rate, seconds);
+  app->soundasset.Add("draw",  "Draw.wav", nullptr, 0,        0,           0      );
+  app->soundasset.Load();
 
   app->scheduler.AddWaitForeverKeyboard(screen);
   app->scheduler.AddWaitForeverMouse(screen);
@@ -224,7 +224,7 @@ extern "C" int MyAppMain() {
   }
 
   if (FLAGS_input.empty()) FATAL("no input supplied");
-  Asset *asset_input = my_app->asset("input");
+  Asset *asset_input = app->asset("input");
   LocalFile input_file(FLAGS_input, "r");
 
   if (!FLAGS_shader.empty()) {
@@ -235,11 +235,11 @@ extern "C" int MyAppMain() {
 
   if (SuffixMatch(FLAGS_input, ".obj", false)) {
     FLAGS_input_3D = true;
-    asset_input->cb = bind(&MyGUI::DrawInput3D, gui, _1, _2);
+    asset_input->cb = bind(&MyGUI::DrawInput3D, gui, _1, _2, _3);
     asset_input->scale = FLAGS_input_scale;
     asset_input->geometry = Geometry::LoadOBJ(&input_file).release();
-    gui->scene.Add(new Entity("axis",  my_app->asset("axis")));
-    gui->scene.Add(new Entity("grid",  my_app->asset("grid")));
+    gui->scene.Add(new Entity("axis",  app->asset("axis")));
+    gui->scene.Add(new Entity("grid",  app->asset("grid")));
     gui->scene.Add(new Entity("input", asset_input));
 
     if (!FLAGS_output.empty()) {
