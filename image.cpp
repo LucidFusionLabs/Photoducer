@@ -179,8 +179,8 @@ extern "C" int MyAppMain() {
   app->soundasset.Add("draw",  "Draw.wav", nullptr, 0,        0,           0      );
   app->soundasset.Load();
 
-  app->scheduler.AddWaitForeverKeyboard(screen);
-  app->scheduler.AddWaitForeverMouse(screen);
+  app->scheduler.AddFrameWaitKeyboard(screen);
+  app->scheduler.AddFrameWaitMouse(screen);
   app->StartNewWindow(screen);
   MyGUI *gui = screen->GetGUI<MyGUI>(0);
 
