@@ -110,16 +110,16 @@ struct MyGUI : public GUI {
       W->gd->UseShader(&my_app->shader);
       glShadertoyShaderWindows(W->gd, &my_app->shader, Color::black, Box(W->width, W->height));
     } else {
-      screen->gd->EnableLayering();
+      W->gd->EnableLayering();
       a->tex.Draw(&gc, W->Box());
     }
   }
 
   int Frame(LFL::Window *W, unsigned clicks, int flag) {
     if (FLAGS_input_3D) Frame3D(W, clicks, flag);
-    screen->gd->DrawMode(DrawMode::_2D);
+    W->gd->DrawMode(DrawMode::_2D);
     if (!FLAGS_input_3D) Frame2D(W, clicks, flag);
-    screen->DrawDialogs();
+    W->DrawDialogs();
     return 0;
   }
 };
@@ -133,7 +133,7 @@ void MyWindowInit(Window *W) {
 void MyWindowStart(Window *W) {
   MyGUI *gui = W->AddGUI(make_unique<MyGUI>(W));
   W->frame_cb = bind(&MyGUI::Frame, gui, _1, _2, _3);
-  W->shell = make_unique<Shell>();
+  W->shell = make_unique<Shell>(W);
 
   BindMap *binds = W->AddInputController(make_unique<BindMap>());
   binds->Add(Key::Backquote, Bind::CB(bind([&](){ W->shell->console(vector<string>()); })));
@@ -157,11 +157,11 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_near_plane = 0.1;
   FLAGS_enable_video = FLAGS_enable_input = true;
   app = new Application(argc, argv);
-  screen = new Window();
+  app->focused = new Window();
   my_app = new MyAppState();
   app->window_start_cb = MyWindowStart;
   app->window_init_cb = MyWindowInit;
-  app->window_init_cb(screen);
+  app->window_init_cb(app->focused);
   app->exit_cb = [](){ delete my_app; };
 }
 
@@ -179,10 +179,10 @@ extern "C" int MyAppMain() {
   app->soundasset.Add("draw",  "Draw.wav", nullptr, 0,        0,           0      );
   app->soundasset.Load();
 
-  app->scheduler.AddFrameWaitKeyboard(screen);
-  app->scheduler.AddFrameWaitMouse(screen);
-  app->StartNewWindow(screen);
-  MyGUI *gui = screen->GetGUI<MyGUI>(0);
+  app->scheduler.AddMainWaitKeyboard(app->focused);
+  app->scheduler.AddMainWaitMouse(app->focused);
+  app->StartNewWindow(app->focused);
+  MyGUI *gui = app->focused->GetGUI<MyGUI>(0);
 
   if (!FLAGS_make_png_atlas.empty()) {
     FLAGS_atlas_dump=1;
@@ -258,8 +258,8 @@ extern "C" int MyAppMain() {
       (app->asset_loader->default_video_loader->LoadVideoFile(&input_file), &asset_input->tex, false);
     pb.AssignBuffer(&asset_input->tex, true);
 
-    if (pb.width && pb.height) screen->Reshape(FLAGS_input_scale ? pb.width *FLAGS_input_scale : pb.width,
-                                               FLAGS_input_scale ? pb.height*FLAGS_input_scale : pb.height);
+    if (pb.width && pb.height) app->focused->Reshape(FLAGS_input_scale ? pb.width *FLAGS_input_scale : pb.width,
+                                                     FLAGS_input_scale ? pb.height*FLAGS_input_scale : pb.height);
     INFO("input dim = (", pb.width, ", ", pb.height, ") pf=", pb.pf);
 
     if (FLAGS_input_filter == "dark2alpha") {
