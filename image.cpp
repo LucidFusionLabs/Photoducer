@@ -33,6 +33,8 @@ DEFINE_int(make_png_atlas_width, 256, "Build PNG atlas with this width");
 DEFINE_int(make_png_atlas_height, 256, "Build PNG atlas with this height");
 DEFINE_string(split_png_atlas, "", "Split PNG atlas back into individual files");
 DEFINE_string(filter_png_atlas, "", "Filter PNG atlas");
+DEFINE_string(paste_image, "", "Paste image filename");
+DEFINE_string(paste_to, "", "[rect]:[x,y,w,h]");
 
 struct MyAppState {
   Shader shader;
@@ -271,6 +273,28 @@ extern "C" int MyAppMain() {
           // if (dark < 256*1/3.0) b[3] = 0;
           b[3] = dark;
         }
+    }
+
+    if (FLAGS_paste_image.size()) {
+      LocalFile paste_file(FLAGS_paste_image, "r");
+      Texture paste_tex, resample_tex, *in_tex = &paste_tex;
+      app->asset_loader->default_video_loader->LoadVideo
+        (app->asset_loader->default_video_loader->LoadVideoFile(&paste_file), &paste_tex, 0);
+      Box paste_box(paste_tex.width, paste_tex.height);
+      if (PrefixMatch(FLAGS_paste_to, "rect:")) paste_box = Box::FromString(FLAGS_paste_to.substr(5));
+      if (paste_tex.width != paste_box.w || paste_tex.height != paste_box.h) {
+        in_tex = &resample_tex;
+        resample_tex.Resize(paste_box.w, paste_box.h, pb.pf, Texture::Flag::CreateBuf);
+        unique_ptr<VideoResamplerInterface> conv(CreateVideoResampler());
+        conv->Open(paste_tex.width, paste_tex.height, paste_tex.pf,
+                   paste_box.w, paste_box.h, resample_tex.pf);
+        conv->Resample(paste_tex.buf, paste_tex.LineSize(), resample_tex.buf, resample_tex.LineSize(), 0, 0);
+      }
+      paste_box.w = max(0, min(pb.width,  paste_box.x + paste_box.w) - paste_box.x);
+      paste_box.h = max(0, min(pb.height, paste_box.y + paste_box.h) - paste_box.y);
+      SimpleVideoResampler::Blit(in_tex->buf, pb.buf, paste_box.w, paste_box.h,
+                                 in_tex->pf, in_tex->LineSize(), 0, 0,
+                                 pb.pf, pb.LineSize(), paste_box.x, paste_box.y);
     }
 
     if (!FLAGS_output.empty()) {
