@@ -159,7 +159,7 @@ extern "C" void MyAppCreate(int argc, const char* const* argv) {
   FLAGS_near_plane = 0.1;
   FLAGS_enable_video = FLAGS_enable_input = true;
   app = new Application(argc, argv);
-  app->focused = new Window();
+  app->focused = Window::Create();
   my_app = new MyAppState();
   app->window_start_cb = MyWindowStart;
   app->window_init_cb = MyWindowInit;
