@@ -40,9 +40,9 @@ struct MyAppState {
   Shader shader;
 } *my_app;
 
-struct MyGUI : public GUI {
+struct MyView : public View {
   Scene scene;
-  MyGUI(Window *W) : GUI(W) {}
+  MyView(Window *W) : View(W) {}
 
   void DrawInput3D(GraphicsDevice *gd, Asset *a, Entity *e) {
     if (!FLAGS_input_prims.empty() && a && a->geometry) {
@@ -133,8 +133,8 @@ void MyWindowInit(Window *W) {
 }
 
 void MyWindowStart(Window *W) {
-  MyGUI *gui = W->AddGUI(make_unique<MyGUI>(W));
-  W->frame_cb = bind(&MyGUI::Frame, gui, _1, _2, _3);
+  MyView *view = W->AddView(make_unique<MyView>(W));
+  W->frame_cb = bind(&MyView::Frame, view, _1, _2, _3);
   W->shell = make_unique<Shell>(W);
 
   BindMap *binds = W->AddInputController(make_unique<BindMap>());
@@ -142,14 +142,14 @@ void MyWindowStart(Window *W) {
   binds->Add(Key::Quote,     Bind::CB(bind([&](){ W->shell->console(vector<string>()); })));
   binds->Add(Key::Escape,    Bind::CB(bind(&Shell::quit,            W->shell.get(), vector<string>())));
   binds->Add(Key::Return,    Bind::CB(bind(&Shell::grabmode,        W->shell.get(), vector<string>())));
-  binds->Add(Key::LeftShift, Bind::TimeCB(bind(&Entity::RollLeft,   &gui->scene.cam, _1)));
-  binds->Add(Key::Space,     Bind::TimeCB(bind(&Entity::RollRight,  &gui->scene.cam, _1)));
-  binds->Add('w',            Bind::TimeCB(bind(&Entity::MoveFwd,    &gui->scene.cam, _1)));
-  binds->Add('s',            Bind::TimeCB(bind(&Entity::MoveRev,    &gui->scene.cam, _1)));
-  binds->Add('a',            Bind::TimeCB(bind(&Entity::MoveLeft,   &gui->scene.cam, _1)));
-  binds->Add('d',            Bind::TimeCB(bind(&Entity::MoveRight,  &gui->scene.cam, _1)));
-  binds->Add('q',            Bind::TimeCB(bind(&Entity::MoveDown,   &gui->scene.cam, _1)));
-  binds->Add('e',            Bind::TimeCB(bind(&Entity::MoveUp,     &gui->scene.cam, _1)));
+  binds->Add(Key::LeftShift, Bind::TimeCB(bind(&Entity::RollLeft,   &view->scene.cam, _1)));
+  binds->Add(Key::Space,     Bind::TimeCB(bind(&Entity::RollRight,  &view->scene.cam, _1)));
+  binds->Add('w',            Bind::TimeCB(bind(&Entity::MoveFwd,    &view->scene.cam, _1)));
+  binds->Add('s',            Bind::TimeCB(bind(&Entity::MoveRev,    &view->scene.cam, _1)));
+  binds->Add('a',            Bind::TimeCB(bind(&Entity::MoveLeft,   &view->scene.cam, _1)));
+  binds->Add('d',            Bind::TimeCB(bind(&Entity::MoveRight,  &view->scene.cam, _1)));
+  binds->Add('q',            Bind::TimeCB(bind(&Entity::MoveDown,   &view->scene.cam, _1)));
+  binds->Add('e',            Bind::TimeCB(bind(&Entity::MoveUp,     &view->scene.cam, _1)));
 }
 
 }; // namespace LFL
@@ -184,7 +184,7 @@ extern "C" int MyAppMain() {
   app->scheduler.AddMainWaitKeyboard(app->focused);
   app->scheduler.AddMainWaitMouse(app->focused);
   app->StartNewWindow(app->focused);
-  MyGUI *gui = app->focused->GetGUI<MyGUI>(0);
+  MyView *view = app->focused->GetView<MyView>(0);
 
   if (!FLAGS_make_png_atlas.empty()) {
     FLAGS_atlas_dump=1;
@@ -237,12 +237,12 @@ extern "C" int MyAppMain() {
 
   if (SuffixMatch(FLAGS_input, ".obj", false)) {
     FLAGS_input_3D = true;
-    asset_input->cb = bind(&MyGUI::DrawInput3D, gui, _1, _2, _3);
+    asset_input->cb = bind(&MyView::DrawInput3D, view, _1, _2, _3);
     asset_input->scale = FLAGS_input_scale;
     asset_input->geometry = Geometry::LoadOBJ(&input_file).release();
-    gui->scene.Add(new Entity("axis",  app->asset("axis")));
-    gui->scene.Add(new Entity("grid",  app->asset("grid")));
-    gui->scene.Add(new Entity("input", asset_input));
+    view->scene.Add(new Entity("axis",  app->asset("axis")));
+    view->scene.Add(new Entity("grid",  app->asset("grid")));
+    view->scene.Add(new Entity("input", asset_input));
 
     if (!FLAGS_output.empty()) {
       set<int> filter_prims;
