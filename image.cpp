@@ -17,7 +17,7 @@
  */
 
 #include "core/app/app.h"
-#include "core/app/gui.h"
+#include "core/app/gl/view.h"
 
 namespace LFL {
 DEFINE_string(output, "", "Output");
