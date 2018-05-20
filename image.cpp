@@ -1,5 +1,5 @@
 /*
- * $Id: image.cpp 1336 2014-12-08 09:29:59Z justin $
+ * $Id$
  * Copyright (C) 2009 Lucid Fusion Labs
 
  * This program is free software: you can redistribute it and/or modify
@@ -17,6 +17,7 @@
  */
 
 #include "core/app/app.h"
+#include "core/app/shell.h"
 #include "core/app/gl/view.h"
 
 namespace LFL {
@@ -36,9 +37,12 @@ DEFINE_string(filter_png_atlas, "", "Filter PNG atlas");
 DEFINE_string(paste_image, "", "Paste image filename");
 DEFINE_string(paste_to, "", "[rect]:[x,y,w,h]");
 
-struct MyAppState {
+struct MyApp : public Application {
   Shader shader;
-} *my_app;
+  MyApp(int ac, const char* const* av) : Application(ac, av), shader(this) {}
+  void OnWindowInit(Window *W);
+  void OnWindowStart(Window *W);
+} *app;
 
 struct MyView : public View {
   Scene scene;
@@ -62,29 +66,29 @@ struct MyView : public View {
 
   void Frame3D(LFL::Window *W, unsigned clicks, int flag) {
     Asset *a = app->asset("input");
-    if (my_app->shader.ID) {
+    if (app->shader.ID) {
       W->gd->ActiveTexture(0);
       W->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
-      W->gd->UseShader(&my_app->shader);
+      W->gd->UseShader(&app->shader);
 
       // mandelbox params
       float par[20][3] = { 0.25, -1.77 };
-      my_app->shader.SetUniform1f("xres", W->width);
-      my_app->shader.SetUniform3fv("par", sizeofarray(par), &par[0][0]);
-      my_app->shader.SetUniform1f("fov_x", FLAGS_field_of_view);
-      my_app->shader.SetUniform1f("fov_y", FLAGS_field_of_view);
-      my_app->shader.SetUniform1f("min_dist", .000001);
-      my_app->shader.SetUniform1i("max_steps", 128);
-      my_app->shader.SetUniform1i("iters", 14);
-      my_app->shader.SetUniform1i("color_iters", 10);
-      my_app->shader.SetUniform1f("ao_eps", .0005);
-      my_app->shader.SetUniform1f("ao_strength", .1);
-      my_app->shader.SetUniform1f("glow_strength", .5);
-      my_app->shader.SetUniform1f("dist_to_color", .2);
-      my_app->shader.SetUniform1f("x_scale", 1);
-      my_app->shader.SetUniform1f("x_offset", 0);
-      my_app->shader.SetUniform1f("y_scale", 1);
-      my_app->shader.SetUniform1f("y_offset", 0);
+      app->shader.SetUniform1f("xres", W->gl_w);
+      app->shader.SetUniform3fv("par", sizeofarray(par), &par[0][0]);
+      app->shader.SetUniform1f("fov_x", FLAGS_field_of_view);
+      app->shader.SetUniform1f("fov_y", FLAGS_field_of_view);
+      app->shader.SetUniform1f("min_dist", .000001);
+      app->shader.SetUniform1i("max_steps", 128);
+      app->shader.SetUniform1i("iters", 14);
+      app->shader.SetUniform1i("color_iters", 10);
+      app->shader.SetUniform1f("ao_eps", .0005);
+      app->shader.SetUniform1f("ao_strength", .1);
+      app->shader.SetUniform1f("glow_strength", .5);
+      app->shader.SetUniform1f("dist_to_color", .2);
+      app->shader.SetUniform1f("x_scale", 1);
+      app->shader.SetUniform1f("x_offset", 0);
+      app->shader.SetUniform1f("y_scale", 1);
+      app->shader.SetUniform1f("y_offset", 0);
 
       v3 up = scene.cam.up, ort = scene.cam.ort, pos = scene.cam.pos;
       v3 right = v3::Cross(ort, up);
@@ -95,8 +99,8 @@ struct MyView : public View {
       W->gd->LoadIdentity();
       W->gd->Mult(m);
 
-      glShadertoyShaderWindows(W->gd, &my_app->shader, Color::black,
-                               Box(-W->width/2, -W->height/2, W->width, W->height));
+      glShadertoyShaderWindows(W->gd, &app->shader, Color::black,
+                               Box(-W->gl_w/2, -W->gl_h/2, W->gl_w, W->gl_h));
     } else {
       scene.cam.Look(W->gd);
       scene.Draw(W->gd, &app->asset.vec);
@@ -106,11 +110,11 @@ struct MyView : public View {
   void Frame2D(LFL::Window *W, unsigned clicks, int flag) {
     GraphicsContext gc(W->gd);
     Asset *a = app->asset("input");
-    if (my_app->shader.ID) {
+    if (app->shader.ID) {
       W->gd->ActiveTexture(0);
       W->gd->BindTexture(GraphicsDevice::Texture2D, a->tex.ID);
-      W->gd->UseShader(&my_app->shader);
-      glShadertoyShaderWindows(W->gd, &my_app->shader, Color::black, Box(W->width, W->height));
+      W->gd->UseShader(&app->shader);
+      glShadertoyShaderWindows(W->gd, &app->shader, Color::black, Box(W->gl_w, W->gl_h));
     } else {
       W->gd->EnableLayering();
       a->tex.Draw(&gc, W->Box());
@@ -126,13 +130,13 @@ struct MyView : public View {
   }
 };
 
-void MyWindowInit(Window *W) {
-  W->width = 420;
-  W->height = 380;
+void MyApp::OnWindowInit(Window *W) {
+  W->gl_w = 420;
+  W->gl_h = 380;
   W->caption = "Image";
 }
 
-void MyWindowStart(Window *W) {
+void MyApp::OnWindowStart(Window *W) {
   MyView *view = W->AddView(make_unique<MyView>(W));
   W->frame_cb = bind(&MyView::Frame, view, _1, _2, _3);
   W->shell = make_unique<Shell>(W);
@@ -155,16 +159,15 @@ void MyWindowStart(Window *W) {
 }; // namespace LFL
 using namespace LFL;
 
-extern "C" void MyAppCreate(int argc, const char* const* argv) {
+extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   FLAGS_near_plane = 0.1;
   FLAGS_enable_video = FLAGS_enable_input = true;
-  app = new Application(argc, argv);
-  app->focused = Window::Create();
-  my_app = new MyAppState();
-  app->window_start_cb = MyWindowStart;
-  app->window_init_cb = MyWindowInit;
+  app = make_unique<MyApp>(argc, argv).release();
+  app->focused = CreateWindow(app).release();
+  app->window_start_cb = bind(&MyApp::OnWindowStart, app, _1);
+  app->window_init_cb = bind(&MyApp::OnWindowInit, app, _1);
   app->window_init_cb(app->focused);
-  app->exit_cb = [](){ delete my_app; };
+  return app;
 }
 
 extern "C" int MyAppMain() {
@@ -172,13 +175,13 @@ extern "C" int MyAppMain() {
   if (app->Init()) return -1;
 
   // app->asset.Add(name,  texture,     scale, translate, rotate, geometry
-  app->asset.Add("axis",   "",          0,     0,         0,      nullptr,                  nullptr, 0, 0, Asset::DrawCB(bind(&glAxis, _1, _2, _3)));
-  app->asset.Add("grid",   "",          0,     0,         0,      Grid::Grid3D().release(), nullptr, 0, 0);
-  app->asset.Add("input",  "",          0,     0,         0,      nullptr,                  nullptr, 0, 0);
+  app->asset.Add(app, "axis",   "",          0,     0,         0,      nullptr,                  nullptr, 0, 0, Asset::DrawCB(bind(&glAxis, _1, _2, _3)));
+  app->asset.Add(app, "grid",   "",          0,     0,         0,      Grid::Grid3D().release(), nullptr, 0, 0);
+  app->asset.Add(app, "input",  "",          0,     0,         0,      nullptr,                  nullptr, 0, 0);
   app->asset.Load();
 
   // app->soundasset.Add(name, filename,   ringbuf, channels, sample_rate, seconds);
-  app->soundasset.Add("draw",  "Draw.wav", nullptr, 0,        0,           0      );
+  app->soundasset.Add(app, "draw",  "Draw.wav", nullptr, 0,        0,           0      );
   app->soundasset.Load();
 
   app->scheduler.AddMainWaitKeyboard(app->focused);
@@ -191,12 +194,12 @@ extern "C" int MyAppMain() {
     vector<string> png;
     DirectoryIter d(FLAGS_make_png_atlas, 0, 0, ".png");
     for (const char *fn = d.Next(); fn; fn = d.Next()) png.push_back(FLAGS_make_png_atlas + fn);
-    AtlasFontEngine::MakeFromPNGFiles("png_atlas", png, point(FLAGS_make_png_atlas_width, FLAGS_make_png_atlas_height), NULL);
+    AtlasFontEngine::MakeFromPNGFiles(app->fonts.get(), "png_atlas", png, point(FLAGS_make_png_atlas_width, FLAGS_make_png_atlas_height));
   }
 
   if (!FLAGS_split_png_atlas.empty()) {
-    app->fonts->atlas_engine.get()->Init(FontDesc(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0));
-    Font *font = app->fonts->Get(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0);
+    app->fonts->atlas_engine.get(app->fonts.get())->Init(FontDesc(FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0));
+    Font *font = app->fonts->Get(app->focused->gl_h, FLAGS_split_png_atlas, "", 0, Color::black, Color::clear, 0);
     CHECK(font);
 
     map<v4, int> glyph_index;
@@ -215,34 +218,34 @@ extern "C" int MyAppMain() {
     string outdir = StrCat(app->assetdir, FLAGS_split_png_atlas);
     LocalFile::mkdir(outdir, 0755);
     string atlas_png_fn = StrCat(app->assetdir, FLAGS_split_png_atlas, ",0,0,0,0,0.0000.png");
-    AtlasFontEngine::SplitIntoPNGFiles(atlas_png_fn, glyphs, outdir + LocalFile::Slash);
+    AtlasFontEngine::SplitIntoPNGFiles(app->focused, atlas_png_fn, glyphs, outdir + LocalFile::Slash);
   }
 
   if (!FLAGS_filter_png_atlas.empty()) {
-    if (Font *f = AtlasFontEngine::OpenAtlas(FontDesc(FLAGS_filter_png_atlas, "", 0, Color::white))) {
-      AtlasFontEngine::WriteGlyphFile(FLAGS_filter_png_atlas, f);
+    if (unique_ptr<Font> f = AtlasFontEngine::OpenAtlas(app->fonts.get(), FontDesc(FLAGS_filter_png_atlas, "", 0, Color::white))) {
+      AtlasFontEngine::WriteGlyphFile(app, FLAGS_filter_png_atlas, f.get());
       INFO("filtered ", FLAGS_filter_png_atlas);
     }
   }
 
   if (FLAGS_input.empty()) FATAL("no input supplied");
   Asset *asset_input = app->asset("input");
-  LocalFile input_file(FLAGS_input, "r");
+  unique_ptr<File> input_file(make_unique<LocalFile>(FLAGS_input, "r"));
 
   if (!FLAGS_shader.empty()) {
     string vertex_shader = LocalFile::FileContents(StrCat(app->assetdir, FLAGS_input_3D ? "" : "lfapp_", "vertex.glsl"));
     string fragment_shader = LocalFile::FileContents(FLAGS_shader);
-    Shader::Create("my_shader", vertex_shader, fragment_shader, ShaderDefines(0,0,1,0), &my_app->shader);
+    Shader::Create(app, "my_shader", vertex_shader, fragment_shader, ShaderDefines(0,0,1,0), &app->shader);
   }
 
   if (SuffixMatch(FLAGS_input, ".obj", false)) {
     FLAGS_input_3D = true;
     asset_input->cb = bind(&MyView::DrawInput3D, view, _1, _2, _3);
     asset_input->scale = FLAGS_input_scale;
-    asset_input->geometry = Geometry::LoadOBJ(&input_file).release();
-    view->scene.Add(new Entity("axis",  app->asset("axis")));
-    view->scene.Add(new Entity("grid",  app->asset("grid")));
-    view->scene.Add(new Entity("input", asset_input));
+    asset_input->geometry = Geometry::LoadOBJ(input_file.get()).release();
+    view->scene.Add(make_unique<Entity>("axis",  app->asset("axis")));
+    view->scene.Add(make_unique<Entity>("grid",  app->asset("grid")));
+    view->scene.Add(make_unique<Entity>("input", asset_input));
 
     if (!FLAGS_output.empty()) {
       set<int> filter_prims;
@@ -255,9 +258,10 @@ extern "C" int MyAppMain() {
     }
   } else {
     FLAGS_draw_grid = true;
-    Texture pb;
-    app->asset_loader->default_video_loader->LoadVideo
-      (app->asset_loader->default_video_loader->LoadVideoFile(&input_file), &asset_input->tex, false);
+    Texture pb(app);
+    auto loader = app->asset_loader->default_video_loader;
+    auto handle = loader->LoadVideoFile(move(input_file));
+    loader->LoadVideo(handle, &asset_input->tex);
     pb.AssignBuffer(&asset_input->tex, true);
 
     if (pb.width && pb.height) app->focused->Reshape(FLAGS_input_scale ? pb.width *FLAGS_input_scale : pb.width,
@@ -276,10 +280,10 @@ extern "C" int MyAppMain() {
     }
 
     if (FLAGS_paste_image.size()) {
-      LocalFile paste_file(FLAGS_paste_image, "r");
-      Texture paste_tex, resample_tex, *in_tex = &paste_tex;
-      app->asset_loader->default_video_loader->LoadVideo
-        (app->asset_loader->default_video_loader->LoadVideoFile(&paste_file), &paste_tex, 0);
+      Texture paste_tex(app), resample_tex(app), *in_tex = &paste_tex;
+      auto loader = app->asset_loader->default_video_loader;
+      auto handle = loader->LoadVideoFile(make_unique<LocalFile>(FLAGS_paste_image, "r"));
+      loader->LoadVideo(handle, &paste_tex, 0);
       Box paste_box(paste_tex.width, paste_tex.height);
       if (PrefixMatch(FLAGS_paste_to, "rect:")) paste_box = Box::FromString(FLAGS_paste_to.substr(5));
       if (paste_tex.width != paste_box.w || paste_tex.height != paste_box.h) {
